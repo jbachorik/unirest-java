@@ -4,7 +4,7 @@
 	<groupId>com.mashape.unirest</groupId>
 	<artifactId>unirest-java</artifactId>
 	<packaging>jar</packaging>
-	<version>1.4.6-SNAPSHOT</version>
+	<version>1.4.7-SNAPSHOT</version>
 	<name>unirest-java</name>
 	<description>Simplified, lightweight HTTP client library</description>
 	<url>http://unirest.io/</url>
@@ -124,6 +124,12 @@
 			<groupId>junit</groupId>
 			<artifactId>junit</artifactId>
 			<version>4.12</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>2.4</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>

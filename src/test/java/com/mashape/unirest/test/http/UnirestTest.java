@@ -32,11 +32,15 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -45,6 +49,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.commons.io.IOUtils;
+import org.apache.http.entity.ContentType;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.json.JSONArray;
@@ -55,11 +61,13 @@ import org.junit.Test;
 
 import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.JsonNode;
+import com.mashape.unirest.http.ObjectMapper;
 import com.mashape.unirest.http.Unirest;
 import com.mashape.unirest.http.async.Callback;
 import com.mashape.unirest.http.exceptions.UnirestException;
 import com.mashape.unirest.http.options.Options;
 import com.mashape.unirest.request.GetRequest;
+import com.mashape.unirest.request.HttpRequest;
 
 public class UnirestTest {
 
@@ -116,7 +124,7 @@ public class UnirestTest {
 	@Test
 	public void testGetUTF8() throws UnirestException {
 		HttpResponse<JsonNode> response = Unirest.get("http://httpbin.org/get")
-		.queryString("param3","こんにちは").asJson();
+		.queryString("param3", "こんにちは").asJson();
 		
 		assertEquals(response.getBody().getObject().getJSONObject("args").getString("param3"), "こんにちは");
 	}
@@ -124,7 +132,7 @@ public class UnirestTest {
 	@Test
 	public void testPostUTF8() throws UnirestException {
 		HttpResponse<JsonNode> response = Unirest.post("http://httpbin.org/post")
-		.field("param3","こんにちは").asJson();
+		.field("param3", "こんにちは").asJson();
 		
 		assertEquals(response.getBody().getObject().getJSONObject("form").getString("param3"), "こんにちは");
 	}
@@ -132,7 +140,7 @@ public class UnirestTest {
 	@Test
 	public void testPostBinaryUTF8() throws UnirestException, URISyntaxException {
 		HttpResponse<JsonNode> response = Unirest.post("http://httpbin.org/post")
-		.field("param3","こんにちは")
+		.field("param3", "こんにちは")
 		.field("file", new File(getClass().getResource("/test").toURI())).asJson();
 		
 		assertEquals("This is a test file", response.getBody().getObject().getJSONObject("files").getString("file"));
@@ -239,35 +247,35 @@ public class UnirestTest {
 		 .field("param1", "value1")
 		 .field("param2","bye")
 		 .asJsonAsync(new Callback<JsonNode>() {
-			
-			public void failed(UnirestException e) {
-				fail();
-			}
-			
-			public void completed(HttpResponse<JsonNode> jsonResponse) {
-				assertTrue(jsonResponse.getHeaders().size() > 0);
-				assertTrue(jsonResponse.getBody().toString().length() > 0);
-				assertFalse(jsonResponse.getRawBody() == null);
-				assertEquals(200, jsonResponse.getStatus());
-				
-				JsonNode json = jsonResponse.getBody();
-				assertFalse(json.isArray());
-				assertNotNull(json.getObject());
-				assertNotNull(json.getArray());
-				assertEquals(1, json.getArray().length());
-				assertNotNull(json.getArray().get(0));
-				
-				assertEquals("value1", json.getObject().getJSONObject("form").getString("param1"));
-				assertEquals("bye", json.getObject().getJSONObject("form").getString("param2"));
-				
-				status = true;
-				lock.countDown();
-			}
-			
-			public void cancelled() {
-				fail();
-			}
-		});
+
+			 public void failed(UnirestException e) {
+				 fail();
+			 }
+
+			 public void completed(HttpResponse<JsonNode> jsonResponse) {
+				 assertTrue(jsonResponse.getHeaders().size() > 0);
+				 assertTrue(jsonResponse.getBody().toString().length() > 0);
+				 assertFalse(jsonResponse.getRawBody() == null);
+				 assertEquals(200, jsonResponse.getStatus());
+
+				 JsonNode json = jsonResponse.getBody();
+				 assertFalse(json.isArray());
+				 assertNotNull(json.getObject());
+				 assertNotNull(json.getArray());
+				 assertEquals(1, json.getArray().length());
+				 assertNotNull(json.getArray().get(0));
+
+				 assertEquals("value1", json.getObject().getJSONObject("form").getString("param1"));
+				 assertEquals("bye", json.getObject().getJSONObject("form").getString("param2"));
+
+				 status = true;
+				 lock.countDown();
+			 }
+
+			 public void cancelled() {
+				 fail();
+			 }
+		 });
 		
 		lock.await(10, TimeUnit.SECONDS);
 		assertTrue(status);
@@ -319,7 +327,143 @@ public class UnirestTest {
 		assertTrue(json.getObject().getJSONObject("files").getString("file").contains("data:image/jpeg"));
 		assertEquals("Mark", json.getObject().getJSONObject("form").getString("name"));
 	}
+	
+	@Test
+	public void testMultipartInputStreamContentType() throws JSONException, InterruptedException, ExecutionException,
+		URISyntaxException, UnirestException, FileNotFoundException {
+		HttpResponse<JsonNode> jsonResponse =
+			Unirest.post("http://httpbin.org/post")
+				.field("name", "Mark")
+				.field("file", new FileInputStream(new File(getClass().getResource("/image.jpg").toURI())), ContentType.APPLICATION_OCTET_STREAM, "image.jpg").asJson();
+		assertTrue(jsonResponse.getHeaders().size() > 0);
+		assertTrue(jsonResponse.getBody().toString().length() > 0);
+		assertFalse(jsonResponse.getRawBody() == null);
+		assertEquals(200, jsonResponse.getStatus());
 
+		JsonNode json = jsonResponse.getBody();
+		assertFalse(json.isArray());
+		assertNotNull(json.getObject());
+		assertNotNull(json.getArray());
+		assertEquals(1, json.getArray().length());
+		assertNotNull(json.getArray().get(0));
+		assertNotNull(json.getObject().getJSONObject("files"));
+
+		assertTrue(json.getObject().getJSONObject("files").getString("file").contains("data:application/octet-stream"));
+		assertEquals("Mark", json.getObject().getJSONObject("form").getString("name"));
+	}
+	
+	@Test
+	public void testMultipartInputStreamContentTypeAsync() throws JSONException, InterruptedException, ExecutionException, URISyntaxException, UnirestException, FileNotFoundException {
+		Unirest.post("http://httpbin.org/post")
+		.field("name", "Mark")
+		.field("file", new FileInputStream(new File(getClass().getResource("/test").toURI())), ContentType.APPLICATION_OCTET_STREAM, "test").asJsonAsync(new Callback<JsonNode>() {
+			
+			public void failed(UnirestException e) {
+				fail();
+			}
+			
+			public void completed(HttpResponse<JsonNode> response) {
+				assertTrue(response.getHeaders().size() > 0);
+				assertTrue(response.getBody().toString().length() > 0);
+				assertFalse(response.getRawBody() == null);
+				assertEquals(200, response.getStatus());
+				
+				JsonNode json = response.getBody();
+				assertFalse(json.isArray());
+				assertNotNull(json.getObject());
+				assertNotNull(json.getArray());
+				assertEquals(1, json.getArray().length());
+				assertNotNull(json.getArray().get(0));
+				
+				assertEquals("This is a test file", json.getObject().getJSONObject("files").getString("file"));
+				assertEquals("Mark", json.getObject().getJSONObject("form").getString("name"));
+				
+				status = true;
+				lock.countDown();
+			}
+			
+			public void cancelled() {
+				fail();
+			}
+			
+		});
+		
+		lock.await(10, TimeUnit.SECONDS);
+		assertTrue(status);
+	}
+	
+	@Test
+	public void testMultipartByteContentType() throws JSONException, InterruptedException, ExecutionException,
+		URISyntaxException, UnirestException, IOException {
+		final InputStream stream = new FileInputStream(new File(getClass().getResource("/image.jpg").toURI()));
+		final byte[] bytes = new byte[stream.available()];
+		stream.read(bytes);
+		stream.close();
+		HttpResponse<JsonNode> jsonResponse =
+			Unirest.post("http://httpbin.org/post")
+				.field("name", "Mark")
+				.field("file", bytes, "image.jpg").asJson();
+		assertTrue(jsonResponse.getHeaders().size() > 0);
+		assertTrue(jsonResponse.getBody().toString().length() > 0);
+		assertFalse(jsonResponse.getRawBody() == null);
+		assertEquals(200, jsonResponse.getStatus());
+
+		JsonNode json = jsonResponse.getBody();
+		assertFalse(json.isArray());
+		assertNotNull(json.getObject());
+		assertNotNull(json.getArray());
+		assertEquals(1, json.getArray().length());
+		assertNotNull(json.getArray().get(0));
+		assertNotNull(json.getObject().getJSONObject("files"));
+
+		assertTrue(json.getObject().getJSONObject("files").getString("file").contains("data:application/octet-stream"));
+		assertEquals("Mark", json.getObject().getJSONObject("form").getString("name"));
+	}
+	
+	@Test
+	public void testMultipartByteContentTypeAsync() throws JSONException, InterruptedException, ExecutionException, URISyntaxException, UnirestException, IOException {
+		final InputStream stream = new FileInputStream(new File(getClass().getResource("/test").toURI()));
+		final byte[] bytes = new byte[stream.available()];
+		stream.read(bytes);
+		stream.close();
+		Unirest.post("http://httpbin.org/post")
+		.field("name", "Mark")
+		.field("file", bytes, "test").asJsonAsync(new Callback<JsonNode>() {
+			
+			public void failed(UnirestException e) {
+				fail();
+			}
+			
+			public void completed(HttpResponse<JsonNode> response) {
+				assertTrue(response.getHeaders().size() > 0);
+				assertTrue(response.getBody().toString().length() > 0);
+				assertFalse(response.getRawBody() == null);
+				assertEquals(200, response.getStatus());
+				
+				JsonNode json = response.getBody();
+				assertFalse(json.isArray());
+				assertNotNull(json.getObject());
+				assertNotNull(json.getArray());
+				assertEquals(1, json.getArray().length());
+				assertNotNull(json.getArray().get(0));
+				
+				assertEquals("This is a test file", json.getObject().getJSONObject("files").getString("file"));
+				assertEquals("Mark", json.getObject().getJSONObject("form").getString("name"));
+				
+				status = true;
+				lock.countDown();
+			}
+			
+			public void cancelled() {
+				fail();
+			}
+			
+		});
+		
+		lock.await(10, TimeUnit.SECONDS);
+		assertTrue(status);
+	}
+	
 	@Test
 	public void testMultipartAsync() throws JSONException, InterruptedException, ExecutionException, URISyntaxException, UnirestException {
 		Unirest.post("http://httpbin.org/post")
@@ -587,7 +731,7 @@ public class UnirestTest {
 	@Test
 	public void testPostMultipleFiles() throws JSONException, UnirestException, URISyntaxException { 
 		HttpResponse<JsonNode> response = Unirest.post("http://httpbin.org/post")
-				.field("param3","wot")
+				.field("param3", "wot")
 				.field("file1", new File(getClass().getResource("/test").toURI())).field("file2", new File(getClass().getResource("/test").toURI())).asJson();
 		
 		JSONObject names = response.getBody().getObject().getJSONObject("files");
@@ -612,7 +756,7 @@ public class UnirestTest {
 	
 	@Test
 	public void testPostArray() throws JSONException, UnirestException { 
-		HttpResponse<JsonNode> response = Unirest.post("http://httpbin.org/post").field("name","Mark").field("name", "Tom").asJson();
+		HttpResponse<JsonNode> response = Unirest.post("http://httpbin.org/post").field("name", "Mark").field("name", "Tom").asJson();
 		
 		JSONArray names = response.getBody().getObject().getJSONObject("form").getJSONArray("name");
 		assertEquals(2, names.length());
@@ -682,8 +826,49 @@ public class UnirestTest {
 			Unirest.setTimeouts(1000, 2000);
 			fail();
 		} catch(Exception e) {
-			// Ok
+			// Ok 
 		}
 	}
+
+	@Test
+	public void testObjectMapper() throws UnirestException, IOException {
+		final String responseJson = "{\"locale\": \"english\"}";
+
+		Unirest.setObjectMapper(new ObjectMapper() {
+			public Object readValue(String ignored) {
+				return Locale.ENGLISH;
+			}
+
+			public String writeValue(Object ignored) {
+				return responseJson;
+			}
+		});
+
+		HttpResponse<Locale> getResponse = Unirest.get("http://httpbin.org/get").asObject(Locale.class);
+		assertEquals(200, getResponse.getStatus());
+		assertEquals(getResponse.getBody(), Locale.ENGLISH);
+
+		HttpResponse<JsonNode> postResponse = Unirest.post("http://httpbin.org/post")
+				.header("accept", "application/json")
+				.header("Content-Type", "application/json")
+				.body(Locale.ENGLISH)
+				.asJson();
+
+		assertEquals(200, postResponse.getStatus());
+		assertEquals(postResponse.getBody().getObject().getString("data"), responseJson);
+	}
 	
+	@Test
+	public void testPostProvidesSortedParams() throws IOException {
+		// Verify that fields are encoded into the body in sorted order.
+		HttpRequest httpRequest = Unirest.post("test")
+			.field("z", "Z")
+			.field("y", "Y")
+			.field("x", "X")
+			.getHttpRequest();
+
+		InputStream content = httpRequest.getBody().getEntity().getContent();
+		String body = IOUtils.toString(content, "UTF-8");
+		assertEquals("x=X&y=Y&z=Z", body);
+	}
 }
